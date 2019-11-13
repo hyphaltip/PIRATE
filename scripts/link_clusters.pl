@@ -82,7 +82,8 @@ for my $file(@coords){
 			$info_hash{$info[0]}=$in;
 			
 		}
-	}close CO;
+	}
+	close CO;
 
 }
 my @genome_headers = sort (@g_headers);
