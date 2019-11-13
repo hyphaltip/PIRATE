@@ -260,13 +260,13 @@ if ( $pan_off == 0 ){
 		my $f = $_;
 		chomp $f;
 		open TFILE, "$coords_dir/$f.co-ords.tab" or die "\n - ERROR: could not open $coords_dir/$f.co-ords.tab.\n";
+
 		while (<TFILE>){
+			next if /^Name/;
 			my $l = $_;
 			chomp $l;
 			my @line = split (/\t/, $l);
-			if( $line[0] ne "Name" ){
-				print GL "$line[0]\t$f\t$line[1]\t$line[8]\n";
-			}
+			print GL join("\t",$line[0],$f,$line[1],$line[8]),"\n";
 		}
 		close TFILE;
 	}
