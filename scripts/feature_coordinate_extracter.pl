@@ -35,7 +35,7 @@ GetOptions(
 	'man' 		=> \$man,
 	'input=s' 	=> \$input_file,
 	'output=s'	=> \$output_file,
-	'features=s' => \$feature_list,
+	'features=s'    => \$feature_list,
 	'intergenic=s' => \$output_intergenic,
 ) or pod2usage(2);
 pod2usage(1) if $help;
@@ -53,21 +53,19 @@ my $isolate = basename($input_file,(".modified.gff", ".gff"));
 
 # Outputs
 open OUTPUT_G, ">$output_file" or die "ERROR: Could not open $output_file.\n";
-print OUTPUT_G "Name\tGene\tStart\tEnd\tLength\tType\tStrand\tContig\tProduct\n";
+print OUTPUT_G join("\t",qw(Name Gene Start End Length Type Strand Contig Product)),"\n";
 
 # Optionally produce intergenic co-ordinates.
 unless( $output_intergenic eq '' ){
 	open OUTPUT_I, ">$output_intergenic" or die "ERROR: Could not open $output_intergenic.\n";
-	print OUTPUT_I "Name\tGene_name\tStart\tEnd\tLength\tType\tContig\tProduct\n";
+	print OUTPUT_I join("\t",qw(Name Gene_name Start End Length Type Contig Product)),"\n";
 }
 
 # Parse input
 my @gene_array = ();
 my %contig_hash_end = ();
 open INPUT, "$input_file" or die "ERROR: Could not open input file - $input_file\n";
-while(<INPUT>){
-	
-	my $line = $_;
+while(my $line = <INPUT>){
 	chomp $line;
 	
 	my @line_array = split(/\t/, $line);
@@ -84,73 +82,42 @@ while(<INPUT>){
 	my $contig="";
 	my $seq_end = "";
 		
-	
 	if( ($line !~ /^##/) && ($line !~ /^#!/)  ){
 		
 		if( $line_array[2] eq "gene"){
 			# ignore genes
-		}
-		#elsif($line_array[2] eq "CDS"){
-		elsif($line_array[2] =~ /^$regex/){
-
-			$contig = $line_array[0];
-			$sta = $line_array[3];
-			$end = $line_array[4];
-			$type = $line_array[2];
+		} elsif ($line_array[2] =~ /^$regex/){
+			my %group = map { split(/=/, $_, 2) } split(/;/,$line_array[8]);
+			($contig,$type,$sta,$end) = ($line_array[0],$line_array[2],$line_array[3],$line_array[4]);
 		
-			if($line_array[6] eq "+"){
-				$strand = "Forward";
-			}elsif($line_array[6] eq "-"){
-				$strand = "Reverse";
-			}
+			$strand = ($line_array[6] eq "+") ? "Forward" : "Reverse";
 		
 			my $len = (($end - $sta) + 1);
-			
-			if($line_array[8] =~ /ID=(${isolate}_[^;]+);/){
-				$id = $1;
-				die "$input_file" if $id eq "";
-			}elsif( $line_array[8] =~ /ID=(${isolate}_.+)*/ ){
-				$id = $1;
-				die "$input_file" if $id eq "";
+			if( $group{ID} =~ /${isolate}/ ) {
+				$id = $group{ID}
 			}
-			
-			if($line_array[8] =~ /gene=([^;]+);/){
-				$gene = $1;
+
+			$gene = ( exists $group{gene} ) ? $group{gene} : "";
+			if ( exists $group{product} ) {
+				$product = $group{product};
+			} elsif( exists $group{Name} ) {
+				$product = $group{Name};
+			} else {
+				$product = $group{Parent};
 			}
-			
-			if( $line_array[8] =~ /product=([^;]+);/  ){
-				$product = $1;
-			}elsif( $line_array[8] =~ /product=(.+)*/ ){
-				$product = $1;
-			}
-			
 			# RAST gffs
-			if ( $product eq "" ){
-			
-				if( $line_array[8] =~ /Name=([^;]+);/  ){
-					$product = $1;
-				}elsif( $line_array[8] =~ /Name=(.+)*/ ){
-					$product = $1;
-				}
-				
-			}
-		
+			$gene = $group{Parent} if ( ! length($gene) && exists $group{Parent} );
 			# store feature co-ordinates.
 			my @tmp_array=("$id", "$gene", "$sta", "$end", "$len", "$type", "$strand", "$contig");
 			push @gene_array, [@tmp_array];
 			
 			# print output
-			print OUTPUT_G "$id\t$gene\t$sta\t$end\t$len\t$type\t$strand\t$contig\t$product\n";
-		
+			print OUTPUT_G join("\t",$id,$gene,$sta,$end,$len,$type,$strand,$contig,$product),"\n";
 		}
-	}elsif($line =~ /^##sequence-region\s+(\S+)\s+(\d+)\s+(\d+)/){
-		
-		$contig = $1;
-		$seq_end = $3;
-		
-		$contig_hash_end{$contig}=$seq_end;
-		
-	}elsif($line =~ /^##FASTA/){
+	} elsif($line =~ /^##sequence-region\s+(\S+)\s+(\d+)\s+(\d+)/){
+		($contig,$seq_end) = ($1,$3);
+		$contig_hash_end{$contig} = $seq_end;
+	} elsif($line =~ /^##FASTA/){
 		last;
 	}
 }
