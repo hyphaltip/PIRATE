@@ -103,7 +103,7 @@ biocLite("ggtree")
 PIRATE accepts GFF3 annotation files containing matching nucleotide sequence at the end of the file. This is the format produced by [Prokka](http://www.vicbioinformatics.com/software.prokka.shtml). PIRATE will verify and discard files that do not follow the accepted GFF3 format and do not have a .gff extension before running. GFF3 files obtained from other sources, such as RAST or the NCBI, may sometime cause problems as they may not adhere to the accepted format. It is recommended that the nucleotide FASTA is downloaded (use ncbi-genome-download) and annotated with Prokka. If this is not possible to do so, for instance you wish to retain the reference genome naming scheme, then it is recommended that you check the fasta header matches the first field in the annotation and that the file contains locus_tag and or ID fields. 
 
 ### Locus Tags/IDs
-PIRATE renames locus_tag and ID to adhere to a standardised format (name of genome[underscore]locus number). The previous nomenclature is retained in the modified GFF3 files present in the "modified\_gffs" directory under previous_ID and previous_locustag fields. The old nomenclature can be transferred to the output files using the subsample_outputs.pl script and the field of interest e.g. --prev_locustag.
+PIRATE renames locus_tag and ID to adhere to a standardised format (name of genome[underscore]locus number). The previous nomenclature is retained in the modified GFF3 files present in the "modified\_gffs" directory under prev_ID and prev_locus fields. The old nomenclature can be transferred to the output files using the subsample_outputs.pl script and the field of interest e.g. subsample_outputs.pl -i PIRATE.gene_families.ordered.tsv -o PIRATE.gene_families.ordered.renamed.tsv --field "prev_locus".
 
 ## Usage
 
@@ -133,10 +133,10 @@ The core functionality of PIRATE is invoked using the ```PIRATE``` command. A nu
  Output:
  -a|--align	    align all genes and produce core/pangenome alignments 
  		        [default: off]
- -r|--rplots	plot summaries using R [requires dependencies]
+ -r|--rplots	    plot summaries using R [requires dependencies]
 
  Usage:
- -t|--threads	number of threads/cores used by PIRATE [default: 2]
+ -t|--threads	    number of threads/cores used by PIRATE [default: 2]
  -q|--quiet	    switch off verbose
  -z		        retain intermediate files [0 = none, 1 = retain pangenome 
  		        files (default - re-run using --pan-off), 2 = all]
@@ -185,17 +185,21 @@ PIRATE allows for more fine-scale control of the parameters used for pangenome c
                     [default: amino acid]
 
     CDHIT options: 
-    --cd-low        cdhit lowest percentage id [default: 98]
-    --cd-step       cdhit step size [default: 0.5]
+    --cd-low	    cdhit lowest percentage id [default: 98]
+    --cd-step	    cdhit step size [default: 0.5]
     --cd-core-off   don't extract core families during cdhit clustering 
-                    [default: on]
-
-    BLAST options:
-    -e|--evalue     e-value used for blast hit filtering [default: 1E-6]
-    -d|--diamond    use diamond instead of BLAST - incompatible 
-                    with --nucleotide [default: off]
-    --hsp_prop      remove BLAST hsps that are < hsp_prop proportion
-                    of query length/query hsp length [default: off]
+			[default: on]
+    --cd-mem	    specify amount of memory required for CD-HIT in MB 
+			[default: 5*input file size]
+	
+     BLAST options:
+     -e|--evalue     e-value used for blast hit filtering [default: 1E-6]
+     --diamond	     use diamond instead of BLAST - incompatible 
+			with --nucleotide [default: off]
+     --diamond-split split diamond files into batches for processing 
+			[default: off] 	
+     --hsp-len	     remove BLAST hsps that are < hsp_len proportion
+			of query length [default: 0]
 
     MCL options:
     -f|--flat       mcl inflation value [default: 1.5]
@@ -208,9 +212,9 @@ Create a pangenome by initially clustering the input fasta file with cdhit using
 ```
 PIRATE -i /path/to/gff/files/ -s "90,91,92,93,94,95" -k "--cd-step 1 --cd-low 95"
 ```
-Create a pangenome for a collection of highly similar genomes. Initially only cluster using cdhit at 100% (-cdl) over a range of high thresholds (-s). Use a stringent homology e-value cutoff (-e) and exclude hits that do not have HSPs that are greater than 50% of the length of the query or input sequence (--hsp_prop)
+Create a pangenome for a collection of highly similar genomes. Initially only cluster using cdhit at 100% (-cdl) over a range of high thresholds (-s). Use a stringent homology e-value cutoff (-e). Exclude HSPs (hits) where the query/subject sequence length is less than 50% of the sequence length of the subject/query (--hsp-len). This final setting is useful for seperating related gene families of genes containing conserved domains/sequences. 
 ```
-PIRATE -i /path/to/gff/files/ -s "95,96,97,98,99,100" -k "--cd-low 100 --e 1E-12 --hsp_prop 0.5"
+PIRATE -i /path/to/gff/files/ -s "95,96,97,98,99,100" -k "--cd-low 100 --e 1E-12 --hsp-len 0.5"
 ```
 A complicated one. Create a pangenome including a range of sequence features (-f), using nucleotide sequence homology (implied by non-CDS features), over a closely related range of % identity thresholds (-s), using a lower cut-off for cd-hit (-k and -cdl), stringent homology parameters (-k and -e). Finally, align all sequence features (-a) and produce R plots (-r).
 ```
@@ -232,6 +236,8 @@ PIRATE produces number of output files. These have been summarised below:
 * **pangenome.gfa** - GFA network file representing all unique connections between gene families (extracted from the GFF files). Can be loaded and visualised in [Bandage](https://rrwick.github.io/Bandage/).
 
 * **modified_gffs directory** - GFF3 files which have been standardised for PIRATE (see above). Loci in gene_families/unique allele files correspond to the annotation in these files.   
+
+* **representative_sequences.ffn|.faa** - representative multifasta sequences for each gene family as nucleotide (ffn) and amino acid (faa) sequence. The longest sequence per gene family selected as a representive (genomes are ordered alphabetically). Information on the isolate and gene family is included in the fasta header.    
 
 * [optional -r] **PIRATE_plots.pdf** - summary plots of the PIRATE pangenome. 
 
@@ -280,7 +286,7 @@ PIRATE.gene_families.tsv and PIRATE.unique_alleles.tsv share the same file forma
 A number of support scripts have been supplied to subset, rename and convert the outputs of PIRATE into other common formats. Support scripts can be found in the tools directory. 
 
 #### Subset Outputs
-Subsample PIRATE.gene_families.ordered.tsv file and rename loci in output. Allows for recalculation of number of genomes gene_families are present in PIRATE.gene_families.ordered.tsv using only a subset of samples (NOTE: currently this will not recalculate the number of duplications/fission-fusion genes). Also, by default, PIRATE will rename locus tags to a standardised scheme in order to make ensure inputs are comparable and unique. This script allows for renaming of locus tags with additional fields from the original files or with original locus_tag info (prev_locustag in modified_gffs directory).
+Subsample PIRATE.gene_families.ordered.tsv file and rename loci in output. Allows for recalculation of number of genomes gene_families are present in PIRATE.gene_families.ordered.tsv using only a subset of samples (NOTE: currently this will not recalculate the number of duplications/fission-fusion genes). Also, by default, PIRATE will rename locus tags to a standardised scheme in order to make ensure inputs are comparable and unique. This script allows for renaming of locus tags with additional fields from the original files or with original locus_tag/ID info (prev_locus/prev_ID tags in gffs created by PIRATE present in the modified_gffs in the output directory).
 ```
 # subsample output using list of samples (one per line)
 subsample_outputs.pl -i /path/to/PIRATE.gene_families.tsv -g /path/to/PIRATE/modified_gffs/  -o /path/to/output_file.tsv
@@ -288,14 +294,18 @@ subsample_outputs.pl -i /path/to/PIRATE.gene_families.tsv -g /path/to/PIRATE/mod
 
 # rename with original locus tag form input files
 subsample_outputs.pl -i /path/to/PIRATE.gene_families.tsv -g /path/to/PIRATE/modified_gffs/  -o /path/to/output_file.tsv
---field "prev_locustag"
+--field "prev_locus"
 ```
 #### Subset alignments
 Recreate gene alignments and allow filtering for genomes, alleles or genes of interest. Output can be filtered on genomes (--list-genomes), alleles (--list-alleles, requires a PIRATE.unique_alleles.tsv as input) and/or percentage of samples (-t|--threshold). Samples with multiple sequences are by default replaced with a single sequences of ?s. This can be modified with --multi-include or -r|--rep-include. NOTE: this only subsets the fasta files, it does not realign sequences.  
 ```
 subset_alignments.pl -i /path/to/PIRATE.gene_families.tab[PIRATE.unique_alleles.tsv] -f /path/to/PIRATE/feature_sequences/ -o ./path/to/output_directory/
 ```
-
+#### identify representative sequences for gene families/alleles
+Identify the representaive sequence for each cluster in a PIRATE.*.tsv file. The file can be found at PIRATE/scripts/representative_sequences.pl. Creates nucleotide and amino acid multifasta files by default. Can be thresholded on minimum proportion of isolates (-t), maximum proportion of isolates (-m) or gene dosage (-d). Modify the input PIRATE file if you wish representative sequence for a specific set of genes.
+```
+select_representative -i /path/to/PIRATE.*.tsv -g /path/to/modified_gffs/ -o /path/to/output_file_root
+```
 #### Unique gene sequences
 Identify unique gene sequences for gene alignments, analogous to the output from BIGSdb. Creates a fasta and a presence/absence matrix.
 ```
