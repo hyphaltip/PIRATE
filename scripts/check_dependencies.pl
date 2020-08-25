@@ -8,46 +8,62 @@ use warnings;
 
 # parallel
 my $parallel = 0;
-$parallel = 1 if `command -v parallel;`;
-print " - ERROR: GNU parallel not found in system path.\n" if $parallel == 0;
+if( `command -v parallel;` ) {
+    $parallel = 1;
+} else {
+    warn(" - ERROR: GNU parallel not found in system path.\n");
+}
 
 # cd-hit
 my $cd_hit = 0;
-$cd_hit = 1 if `command -v cdhit;`;
-$cd_hit = 1 if `command -v cd-hit;`;
-print " - ERROR: cd-hit (or alternate invocation cdhit) not found in system path.\n" if $cd_hit == 0;
+for my $exe (qw(cdhit cd-hit) ) {
+    if( `command -v $exe;` ) {
+	$cd_hit = 1;
+	last;
+    }
+}
+warn(" - ERROR: cd-hit (or alternate invocation cdhit) not found in system path.\n") if $cd_hit == 0;
 
 # blast+
 my $blast = 0 ;
-$blast = 1 if `command -v blastn;`;
-print " - ERROR: blast+ not found in system path.\n" if $blast == 0;
+if ( `command -v blastn;` ) {
+    $blast = 1;
+} else {
+    warn(" - ERROR: blast+ not found in system path.\n");
+}
 
 # mcl 
 my $mcl = 0;
-$mcl = 1 if `command -v mcl;`;
-print " - ERROR: mcl not found in system path.\n" if $mcl == 0;
+if( `command -v mcl;` ) {
+    $mcl = 1;
+} else {
+    warn(" - ERROR: mcl not found in system path.\n");
+}
 
 # die if dependencies are not available.
-if ( ($cd_hit == 0) || ($blast == 0) || ($mcl == 0) || ($parallel == 0) ) { exit(2) };
+unless ( $cd_hit && $blast && $mcl && $parallel ) { exit(2) }
 
 # check optional dependencies
 
 # diamond
-my $diamond = 0; 
-$diamond = 1 if `command -v diamond;`;
-
-my $diamond_err = 0;
-print "\n - WARNING: cannot find diamond binary, cannot use --diamond command.\n" if $diamond == 0;
+unless ( `command -v diamond` ) {
+    warn("\n - WARNING: cannot find diamond binary, cannot use --diamond command.\n");
+}
 
 # R
-my $R = 0; 
-$R = 1 if `command -v R;`;
-print " - WARNING: R not found in system path, cannot use -r command.\n" if $R == 0;
+
+unless( `command -v R;`) {
+    warn(" - WARNING: R not found in system path, cannot use -r command.\n");
+}
 
 # fasttree
-my $ft = 0; 
-$ft = 1 if `command -v fasttree;`;
-$ft = 1 if `command -v FastTree;`;
-print " - WARNING: fasttree not found in system path, a binary presence-absence tree will not be created.\n" if $ft == 0;
+my $ft = 0;
+for my $exe (qw(FastTreeMP FastTree fasttree) ) { 
+    if( `command -v $exe;`) {
+	$ft = 1;
+	last;
+    }
+}
 
+warn(" - WARNING: fasttree not found in system path, a binary presence-absence tree will not be created.\n") if $ft == 0;
 exit

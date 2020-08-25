@@ -34,7 +34,7 @@ GetOptions(
 	'input=s' 	=> \$input_file,
 	'output=s'	=> \$output_file,
 	'features=s'    => \$feature_list,
-	'intergenic=s' => \$output_intergenic,
+	'intergenic=s'  => \$output_intergenic,
 ) or pod2usage(2);
 pod2usage(1) if $help;
 pod2usage(-verbose => 2) if $man;
@@ -54,13 +54,13 @@ open(OUTPUT_G, ">$output_file") or die "ERROR: Could not open $output_file.\n";
 print OUTPUT_G join("\t",qw(Name Gene Start End Length Type Strand Contig Product)),"\n";
 
 # Optionally produce intergenic co-ordinates.
-unless( defined $output_intergenic && length($output_intergenic) ) { 
+unless( defined $output_intergenic ) {
     open (OUTPUT_I, ">$output_intergenic") or die "ERROR: Could not open $output_intergenic.\n";
     print OUTPUT_I join("\t",qw(Name Gene_name Start End Length Type Contig Product)),"\n";
 }
 
 # Parse input
-#my @gene_array = ();
+my %genes = ();
 my %contig_hash_end = ();
 open(INPUT, "$input_file") or die "ERROR: Could not open input file - $input_file\n";
 while(my $line = <INPUT>) {
