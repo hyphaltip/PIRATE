@@ -82,13 +82,12 @@ while(my $line = <INPUT>){
 	my $contig="";
 	my $seq_end = "";
 		
-	if( ($line !~ /^##/) && ($line !~ /^#!/)  ){
-		
+	if( ($line !~ /^##/) && ($line !~ /^#!/) ) {
 		if( $line_array[2] eq "gene"){
 			# ignore genes
 		} elsif ($line_array[2] =~ /^$regex/){
 			my %group = map { split(/=/, $_, 2) } split(/;/,$line_array[8]);
-			($contig,$type,$sta,$end) = ($line_array[0],$line_array[2],$line_array[3],$line_array[4]);
+			($contig,undef,$type,$sta,$end) = @line_array;
 		
 			$strand = ($line_array[6] eq "+") ? "Forward" : "Reverse";
 		
