@@ -7,6 +7,7 @@ use warnings;
 use Bio::Perl;
 use Getopt::Long qw(GetOptions :config no_ignore_case);
 use Pod::Usage;
+use File::Spec;
 
 # Version
 
@@ -34,13 +35,14 @@ my $length_threshold = 120;
 GetOptions(
 	'help|?' 	=> \$help,
 	'man' 		=> \$man,
-	'sample=s' => \$sample,
+	'sample=s'      => \$sample,
 	'directory=s' 	=> \$pirate_dir,
 	'output=s'	=> \$output_file,
-	'nucleotide' => \$nuc,
-	'threshold=i' => \$length_threshold,
-	'check' => \$check,
+	'nucleotide'    => \$nuc,
+	'threshold=i'   => \$length_threshold,
+	'check'         => \$check,
 ) or pod2usage(2);
+
 pod2usage(1) if $help;
 pod2usage(-verbose => 2) if $man;
 
@@ -48,12 +50,11 @@ pod2usage(-verbose => 2) if $man;
 die "$pirate_dir is not a directory.\n" unless -d "$pirate_dir";
 
 # stop codons
-my %stop_codons = (
 
+my %stop_codons = (
     TAA  => 1,
     TGA => 1,
-    TAG  => 1,
-    
+    TAG  => 1,    
 );
 
 # start codons 
@@ -77,162 +78,147 @@ my $count = 0;
 
 # Open gff and store contig sequence.
 open INPUT, "$pirate_dir/modified_gffs/$sample.gff" or die "ERROR: Could not open $pirate_dir/modified_gffs/$sample.gff";		
-while(<INPUT>){
-	
-	my $line=$_;
-	chomp $line;
+while(<INPUT>) {
 
-	++$count;
+    my $line=$_;
+    chomp $line;
 
-	# start storing sequence after fasta header.
-	if($line =~ /^##FASTA/){ 
-		$include = 1; 
+    ++$count;
+
+    # start storing sequence after fasta header.
+    if($line =~ /^##FASTA/){ 
+	$include = 1; 
+    } elsif( $include == 1) {
+
+	# header is used as contig id.
+	if($line =~ /^>(\S+)/){
+	    $contig_id = $1;		
 	}
-	elsif( $include == 1){
-		
-		# header is used as contig id.
-		if($line =~ /^>(\S+)/){
-			$contig_id = $1;		
-		}
-		# sequence is stored in hash.
-		elsif($line =~ /^([ATGCNatcgn]+)$/){
-		#elsif($line =~ /(\S+)/){
+	# sequence is stored in hash.
+	elsif($line =~ /^([ATGCNatcgn]+)$/){
+	    #elsif($line =~ /(\S+)/){
 
-			# sanity check - each contig should have id
-			die "Contig has no header" if $contig_id eq "" ;
-			
-			# store uppercase sequence.
-			my $seq = $1;
-			$seq = uc($seq);
-	
-			# store as array
-			push @{$contig_hash_temp{$contig_id}}, $seq;
-				
-			# concatenate sequence if it is already present in the hash.
-			#if(!$contig_hash{$contig_id}){
+	    # sanity check - each contig should have id
+	    die "Contig has no header" if $contig_id eq "" ;
+
+	    # store uppercase sequence.
+	    my $seq = $1;
+	    $seq = uc($seq);
+
+	    # store as array
+	    push @{$contig_hash_temp{$contig_id}}, $seq;
+
+	    # concatenate sequence if it is already present in the hash.
+	    #if(!$contig_hash{$contig_id}){
 				#$contig_hash{$contig_id}=$seq;
-			#}else{
+	    #}else{
 				#$contig_hash{$contig_id}=$contig_hash{$contig_id}.$seq;
-			#}
-			
-		}else{
-			print "Warning: unexpected characters in line $count for sample $sample\n";
-		}
+	    #}
+
+	} else{
+	    print "Warning: unexpected characters in line $count for sample $sample\n";
 	}
-	
-}close INPUT;
+    }
+}
+close INPUT;
 
 # convert array to scalar 
 for my $k ( keys %contig_hash_temp ){
-	$contig_hash{$k} = join("", @{$contig_hash_temp{$k}});
+    $contig_hash{$k} = join("", @{$contig_hash_temp{$k}});
 }
 %contig_hash_temp = ();
 
-#Parse co-ordinate file.
+# Parse co-ordinate file.
 open COORDS, "$pirate_dir/co-ords/$sample.co-ords.tab" or die "ERROR: Could not open $pirate_dir/co-ords/$sample.co-ords.tab";
-while(<COORDS>){
-	unless(/^Name\tGene/){
-	
-		my $line = $_;
-		chomp $line;
-	
-		my @line = split(/\t/,$line);
-		
-		my $locus_tag = $line[0];			
-	
-		# Find sequence, revcomp if necessary.			
-		my $start = $line[2];
-		my $end = $line[3];
-		my $len = $line[4];				
-		my $strand = $line[6];
-		my $contig = $line[7];			
-		
-		# check feature matches contig and base psition exists
-		my $present = 1; 
-		if ( $contig_hash{$contig} ){
-			
-			my $c_l = length($contig_hash{$contig});
-			$present = 0 if $end > $c_l;
-			
-		}else{
-			$present = 0;
-		}
-		
-		# process if present
-		if ( $present == 1 ){	
-		
-			# Prepare for output
-			my $seq = substr($contig_hash{$contig}, $start-1, $len); # account for zero indexing
-		
-			# revcomp if necessary.
-			if( $strand eq "Reverse" ){
-				$seq = reverse_complement($seq)->seq();
-			}
-		
-			# check for errors
-			if( $seq eq "" ){
-				print "Warning: no sequence for $locus_tag\n";
-			}
-		
-			# length of sequence 
-			my $l = length($seq);
-		
-			# exclude sequences if they do not match a number or criteria.
-			my $include = 1;
-		
-			# must be divisible by 3 
-			if( ($l % 3) != 0 ){
-				$include = 0;
-			}
-		
-			# have consensus stop codon.
-			if ( ! $stop_codons{substr($seq, -3)} ){
-				$include = 0;
-			}
-		
-			# have consensus start codon.
-			if ( ! $start_codons{substr($seq, 0, 3)} ){
-				$include = 0;
-			}
-		
-			# have <5% Ns
-			my $ns = () = $seq =~ /N/;
-			if( ($ns/$l) > "0.05" ){
-				$include = 0;
-			}
-		
-			# exclude sequences < length_threshold
-			if ( $l <= $length_threshold ){
-				$include = 0;
-			}
-		
-			if ( ($include == 1) || ( $check == 1 ) ){
-		
-				# optionally translate to amino acid sequence.
-				if( $nuc == 0 ){
-			
-					$seq = translate($seq)->seq();
-				
-					# check for stop codons in middle of sequence
-					my $stop_count  = () = $seq =~ /\*/g;
-				
-					# Print to file if only one stop codon in sequence
-					if( $stop_count == 1 ){				
-						print OUTFILE ">$locus_tag\n$seq\n";
-					}
-				
-				}else{
-			
-					print OUTFILE ">$locus_tag\n$seq\n";
-				
-				}		
-			
-			}
-		}
+while(<COORDS>) {
+    unless(/^Name\tGene/){
+
+	my $line = $_;
+	chomp $line;
+
+	my ($locus_tag,$gene,$start,$end,$len,$strand,$contig) = split(/\t/,$line);
+
+	# Find sequence, revcomp if necessary.			
+
+	# check feature matches contig and base psition exists
+	my $present = 1; 
+	if ( $contig_hash{$contig} ){
+	    my $c_l = length($contig_hash{$contig});
+	    $present = 0 if $end > $c_l;
+	}else {
+	    $present = 0;
 	}
-	
-}close COORDS;
+
+	# process if present
+	if ( $present == 1 ){
+	    # Prepare for output
+	    my $seq = substr($contig_hash{$contig}, $start-1, $len); # account for zero indexing
+
+	    # revcomp if necessary.
+	    if( $strand eq "Reverse" ){
+		$seq = reverse_complement($seq)->seq();
+	    }
+
+	    # check for errors
+	    if( $seq eq "" ){
+		print "Warning: no sequence for $locus_tag\n";
+	    }
+
+	    # length of sequence 
+	    my $l = length($seq);
+
+	    # exclude sequences if they do not match a number or criteria.
+	    my $include = 1;
+
+	    # must be divisible by 3 
+	    if( ($l % 3) != 0 ){
+		$include = 0;
+	    }
+
+	    # have consensus stop codon.
+	    if ( ! $stop_codons{substr($seq, -3)} ){
+		$include = 0;
+	    }
+
+	    # have consensus start codon.
+	    if ( ! $start_codons{substr($seq, 0, 3)} ){
+		$include = 0;
+	    }
+
+	    # have <5% Ns
+	    my $ns = () = $seq =~ /N/;
+	    if( ($ns/$l) > "0.05" ){
+		$include = 0;
+	    }
+
+	    # exclude sequences < length_threshold
+	    if ( $l <= $length_threshold ){
+		$include = 0;
+	    }
+
+	    if ( ($include == 1) || ( $check == 1 ) ){
+
+		# optionally translate to amino acid sequence.
+		if( $nuc == 0 ){
+		    $seq = translate($seq)->seq(); # this could have a codon translation table input...
+
+		    # check for stop codons in middle of sequence
+		    my $stop_count  = () = $seq =~ /\*/g;
+
+		    # Print to file if only one stop codon in sequence
+		    if( $stop_count == 1 ){ # could it be 1 or 0 stop codons?
+			print OUTFILE ">$locus_tag\n$seq\n";
+		    }
+		} else{
+		    print OUTFILE ">$locus_tag\n$seq\n";
+
+		}		
+
+	    }
+	}
+    }
+}
+
+close COORDS;
 close OUTFILE;
-
 exit
-
