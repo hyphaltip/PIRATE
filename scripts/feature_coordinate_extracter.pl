@@ -24,9 +24,7 @@ use File::Basename;
 # command line options
 my $man = 0;
 my $help = 0;
-my $input_file = '';
-my $output_file = '';
-my $output_intergenic = '';
+my ($input_file,$output_file,$output_intergenic); 
 
 my $feature_list = "CDS";
 
@@ -52,77 +50,69 @@ die "ERROR: input file not found.\n" unless -f $input_file;
 my $isolate = basename($input_file,(".modified.gff", ".gff"));
 
 # Outputs
-open OUTPUT_G, ">$output_file" or die "ERROR: Could not open $output_file.\n";
+open(OUTPUT_G, ">$output_file") or die "ERROR: Could not open $output_file.\n";
 print OUTPUT_G join("\t",qw(Name Gene Start End Length Type Strand Contig Product)),"\n";
 
 # Optionally produce intergenic co-ordinates.
-unless( $output_intergenic eq '' ){
-	open OUTPUT_I, ">$output_intergenic" or die "ERROR: Could not open $output_intergenic.\n";
-	print OUTPUT_I join("\t",qw(Name Gene_name Start End Length Type Contig Product)),"\n";
+unless( defined $output_intergenic && length($output_intergenic) ) { 
+    open (OUTPUT_I, ">$output_intergenic") or die "ERROR: Could not open $output_intergenic.\n";
+    print OUTPUT_I join("\t",qw(Name Gene_name Start End Length Type Contig Product)),"\n";
 }
 
 # Parse input
-my @gene_array = ();
+#my @gene_array = ();
 my %contig_hash_end = ();
-open INPUT, "$input_file" or die "ERROR: Could not open input file - $input_file\n";
-while(my $line = <INPUT>){
-	chomp $line;
-	
+open(INPUT, "$input_file") or die "ERROR: Could not open input file - $input_file\n";
+while(my $line = <INPUT>) {
+    chomp $line;
+
+    if( ($line !~ /^##/) && ($line !~ /^#!/) ) {
 	my @line_array = split(/\t/, $line);
-	
+	next if( $line_array[2] eq "gene"); # skip gene features
+
 	# variables
-	my $sta="";
-	my $end="";
-	my $strand="";
-	my $id="";
-	my $gene="";
-	my $product = "";
-	my $type = "";
+	my ($sta,$end,$strand,$id,$gene,$product,$type,$contig,$seq_end,$source);
 
-	my $contig="";
-	my $seq_end = "";
-		
-	if( ($line !~ /^##/) && ($line !~ /^#!/) ) {
-		if( $line_array[2] eq "gene"){
-			# ignore genes
-		} elsif ($line_array[2] =~ /^$regex/){
-			my %group = map { split(/=/, $_, 2) } split(/;/,$line_array[8]);
-			($contig,undef,$type,$sta,$end) = @line_array;
-		
-			$strand = ($line_array[6] eq "+") ? "Forward" : "Reverse";
-		
-			my $len = (($end - $sta) + 1);
-			if( $group{ID} =~ /${isolate}/ ) {
-				$id = $group{ID}
-			}
+	if ($line_array[2] =~ /^$regex/) {
+	    my %group = map { split(/=/, $_, 2) } split(/;/,pop @line_array);
+	    ($contig,$source,$type,$sta,$end) = @line_array;
+	    
+	    $strand = ($line_array[6] eq "+") ? "Forward" : "Reverse";
 
-			$gene = ( exists $group{gene} ) ? $group{gene} : "";
-			if ( exists $group{product} ) {
-				$product = $group{product};
-			} elsif( exists $group{Name} ) {
-				$product = $group{Name};
-			} else {
-				$product = $group{Parent};
-			}
-			# RAST gffs
-			$gene = $group{Parent} if ( ! length($gene) && exists $group{Parent} );
-			# store feature co-ordinates.
-			my @tmp_array=("$id", "$gene", "$sta", "$end", "$len", "$type", "$strand", "$contig");
-			push @gene_array, [@tmp_array];
-			
-			# print output
-			print OUTPUT_G join("\t",$id,$gene,$sta,$end,$len,$type,$strand,$contig,$product),"\n";
+	    my $len = (($end - $sta) + 1);
+
+	    if( exists $group{ID} && $group{ID} =~ /${isolate}/ ) {
+		$id = $group{ID};
+	    }
+
+	    $gene = ( exists $group{gene} ) ? $group{gene} : "";
+	    # loop through possible ways Product is encoded
+	    for my $possible_product ( qw(product Product Name name Parent parent) ) {
+		if ( exists $group{$possible_product} ) {
+		    $product = $group{$possible_product};
+		    last;
 		}
-	} elsif($line =~ /^##sequence-region\s+(\S+)\s+(\d+)\s+(\d+)/){
-		($contig,$seq_end) = ($1,$3);
-		$contig_hash_end{$contig} = $seq_end;
-	} elsif($line =~ /^##FASTA/){
-		last;
+	    }
+	    # RAST gffs
+	    $gene = $group{Parent} if ( ! defined $gene && exists $group{Parent} );
+
+	    # store feature co-ordinates.
+	    my @tmp_array=($id,$gene,$sta,$end,$len,$type,$strand,$contig);
+#	    push @gene_array, [@tmp_array];
+
+	    # print output
+	    print OUTPUT_G join("\t",@tmp_array,$product),"\n";
 	}
+    } elsif($line =~ /^##sequence-region\s+(\S+)\s+(\d+)\s+(\d+)/){
+	my ($contig,$seq_end) = ($1,$3);
+	$contig_hash_end{$contig} = $seq_end;
+    } elsif($line =~ /^##FASTA/){
+	last;
+    }
 }
 
 # if only genic co-ordinates are needed stop here.
-unless ( $output_intergenic eq '' ){ exit }
+if( ! defined $output_intergenic ){ exit }
 
 # Otherwise indentify intergenic co-ordinates. 
 #$gene_count=scalar(@gene_array);
